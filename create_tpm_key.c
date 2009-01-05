@@ -138,7 +138,7 @@ int main(int argc, char **argv)
 	TSS_HKEY	hKey;
 	TSS_HKEY	hSRK;
 	TSS_RESULT	result;
-	TSS_HPOLICY	srkUsagePolicy, keyUsagePolicy;
+	TSS_HPOLICY	srkUsagePolicy, keyUsagePolicy, keyMigrationPolicy;
 	BYTE		*blob;
 	UINT32		blob_size, srk_authusage;
 	FILE		*out;
@@ -151,7 +151,7 @@ int main(int argc, char **argv)
 
 	while (1) {
 		option_index = 0;
-		c = getopt_long(argc, argv, "pe:q:s:ah",
+		c = getopt_long(argc, argv, "pe:q:s:ahw:",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -390,6 +390,34 @@ int main(int argc, char **argv)
 		char n[256], p[128];
 		unsigned int size_n, size_p;
 		BYTE *pubSRK;
+
+		/*Set migration policy needed to wrap the key*/
+		if ((result = Tspi_Context_CreateObject(hContext,
+						TSS_OBJECT_TYPE_POLICY,
+						TSS_POLICY_MIGRATION,
+						&keyMigrationPolicy))) {
+			print_error("Tspi_Context_CreateObject", result);
+			Tspi_Context_Close(hContext);
+			exit(result);
+		}
+		if (auth) {
+			/*Set the same authdata to Migration Policy*/	
+			if ((result = Tspi_Policy_SetSecret(keyMigrationPolicy,
+							    TSS_SECRET_MODE_PLAIN,
+							    strlen(authdata),
+							    (BYTE *)authdata))) {
+				print_error("Tspi_Policy_SetSecret", result);
+				Tspi_Context_Close(hContext);
+				exit(result);
+			}
+		}
+
+		if ((result = Tspi_Policy_AssignToObject(keyMigrationPolicy, hKey))) {
+			print_error("Tspi_Policy_AssignToObject", result);
+			Tspi_Context_CloseObject(hContext, hKey);
+			Tspi_Context_Close(hContext);
+			exit(result);
+		}
 
 		/* Pull the PubKRK out of the TPM */
 		if ((result = Tspi_Key_GetPubKey(hSRK, &size_n, &pubSRK))) {
