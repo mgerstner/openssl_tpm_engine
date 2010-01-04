@@ -356,7 +356,7 @@ int main(int argc, char **argv)
 			}
 
 			if (EVP_read_pw_string(authdata, 128,
-						"Enter Password: ", 1)) {
+						"Enter Key Usage Password: ", 1)) {
 				printf("Passwords do not match.\n");
 				free(authdata);
 				Tspi_Context_Close(hContext);
@@ -401,7 +401,22 @@ int main(int argc, char **argv)
 			exit(result);
 		}
 		if (auth) {
-			/*Set the same authdata to Migration Policy*/	
+			char *authdata = calloc(1, 128);
+
+			if (!authdata) {
+				fprintf(stderr, "malloc failed.\n");
+				Tspi_Context_Close(hContext);
+				exit(result);
+			}
+
+			if (EVP_read_pw_string(authdata, 128,
+						"Enter Key Migration Password: ", 1)) {
+				printf("Passwords do not match.\n");
+				free(authdata);
+				Tspi_Context_Close(hContext);
+				exit(result);
+			}
+
 			if ((result = Tspi_Policy_SetSecret(keyMigrationPolicy,
 							    TSS_SECRET_MODE_PLAIN,
 							    strlen(authdata),
@@ -410,6 +425,8 @@ int main(int argc, char **argv)
 				Tspi_Context_Close(hContext);
 				exit(result);
 			}
+
+			free(authdata);
 		}
 
 		if ((result = Tspi_Policy_AssignToObject(keyMigrationPolicy, hKey))) {
