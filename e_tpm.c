@@ -303,6 +303,7 @@ int tpm_load_srk(UI_METHOD *ui)
 		Tspi_Context_CloseObject(hContext, hSRK);
 		free(auth);
 		TSSerr(TPM_F_TPM_LOAD_SRK, TPM_R_REQUEST_FAILED);
+		return 0;
 	}
 
 	/* secret_mode is a global that may be set by engine ctrl
