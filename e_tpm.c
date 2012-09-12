@@ -808,6 +808,24 @@ static int tpm_rsa_finish(RSA *rsa)
 
 	DBG("%s", __FUNCTION__);
 
+	if (!app_data)
+		return 1;
+
+	if (app_data->hHash) {
+		Tspi_Context_CloseObject(hContext, app_data->hHash);
+		app_data->hHash = NULL_HHASH;
+	}
+
+	if (app_data->hKey) {
+		Tspi_Context_CloseObject(hContext, app_data->hKey);
+		app_data->hKey = NULL_HKEY;
+	}
+
+	if (app_data->hEncData) {
+		Tspi_Context_CloseObject(hContext, app_data->hEncData);
+		app_data->hEncData = NULL_HENCDATA;
+	}
+
 	OPENSSL_free(app_data);
 
 	return 1;
