@@ -1183,7 +1183,7 @@ static int tpm_rsa_keygen(RSA *rsa, int bits, BIGNUM *e, BN_GENCB *cb)
 	}
 
 	/* Call create key using the new object */
-	if ((result = Tspi_Key_CreateKey(hKey, hSRK, NULL))) {
+	if ((result = Tspi_Key_CreateKey(hKey, hSRK, NULL_HPCRS))) {
 		Tspi_Context_CloseObject(hContext, hKey);
 		TSSerr(TPM_F_TPM_RSA_KEYGEN, TPM_R_REQUEST_FAILED);
 		return 0;
