@@ -32,6 +32,7 @@
 #include <tss/tss_error.h>
 #include <tss/tspi.h>
 
+#include "ssl_compat.h"
 
 #define ERR(x, ...)	fprintf(stderr, "%s:%d " x "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
@@ -71,8 +72,8 @@ int test_num[] = { 1, 1, 2, 2 };
 int
 run_test(EVP_PKEY *key)
 {
-	RSA *rsa;
-	char signature[256], data_to_sign[DATA_SIZE], data_recovered[DATA_SIZE];
+	RSA *rsa = NULL;
+	unsigned char signature[256], data_to_sign[DATA_SIZE], data_recovered[DATA_SIZE];
 	int sig_size;
 
 	if (RAND_bytes(data_to_sign, sizeof(data_to_sign)) != 1) {
@@ -80,10 +81,19 @@ run_test(EVP_PKEY *key)
 		return 1;
 	}
 
-	if (key)
-		rsa = key->pkey.rsa;
-	else
-		rsa = RSA_generate_key(KEY_SIZE_BITS, 65537, NULL, NULL);
+	if (key) {
+		rsa = EVP_PKEY_get0_RSA(key);
+	}
+	else {
+		BIGNUM *e = BN_new();
+		rsa = RSA_new();
+		if( !e || !rsa || !BN_set_word(e, 65537) )
+			return 1;
+		if( RSA_generate_key_ex(rsa, KEY_SIZE_BITS, e, NULL) != 1 )
+		{
+			return 1;
+		}
+	}
 
 	if (!rsa)
 		return 1;

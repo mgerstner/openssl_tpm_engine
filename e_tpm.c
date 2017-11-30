@@ -19,7 +19,6 @@
 #include <string.h>
 
 #include <openssl/crypto.h>
-#include <openssl/dso.h>
 #include <openssl/engine.h>
 #include <openssl/evp.h>
 #include <openssl/objects.h>
@@ -37,6 +36,7 @@
 #include <trousers/trousers.h>  // XXX DEBUG
 
 #include "e_tpm.h"
+#include "ssl_compat.h"
 
 //#define DLOPEN_TSPI
 
@@ -66,7 +66,7 @@ static int tpm_rsa_keygen(RSA *, int, BIGNUM *, BN_GENCB *);
 /* random functions */
 static int tpm_rand_bytes(unsigned char *, int);
 static int tpm_rand_status(void);
-static void tpm_rand_seed(const void *, int);
+static RAND_SEED_RET_TYPE tpm_rand_seed(const void *, int);
 
 /* The definitions for control commands specific to this engine */
 #define TPM_CMD_SO_PATH		ENGINE_CMD_BASE
@@ -88,24 +88,8 @@ static const ENGINE_CMD_DEFN tpm_cmd_defns[] = {
 	{0, NULL, NULL, 0}
 };
 
-#ifndef OPENSSL_NO_RSA
-static RSA_METHOD tpm_rsa = {
-	"TPM RSA method",
-	tpm_rsa_pub_enc,
-	tpm_rsa_pub_dec,
-	tpm_rsa_priv_enc,
-	tpm_rsa_priv_dec,
-	NULL, /* set in tpm_engine_init */
-	BN_mod_exp_mont,
-	tpm_rsa_init,
-	tpm_rsa_finish,
-	(RSA_FLAG_SIGN_VER | RSA_FLAG_NO_BLINDING),
-	NULL,
-	NULL, /* sign */
-	NULL, /* verify */
-	tpm_rsa_keygen
-};
-#endif
+static RSA_METHOD *tpm_rsa;
+static const RSA_METHOD *ssl_rsa;
 
 static RAND_METHOD tpm_rand = {
 	/* "TPM RAND method", */
@@ -195,14 +179,44 @@ static unsigned int (*p_tspi_Policy_AssignToObject)();
 #define Tspi_Policy_AssignToObject p_tspi_Policy_AssignToObject
 #endif /* DLOPEN_TSPI */
 
+static int setup_rsa_method()
+{
+	tpm_rsa = RSA_meth_new("TPM RSA method", 0);
+	if (tpm_rsa == NULL)
+		return 0;
+
+	if (!RSA_meth_set_flags(tpm_rsa,
+				RSA_FLAG_SIGN_VER | RSA_FLAG_NO_BLINDING) ||
+	    !RSA_meth_set_pub_enc(tpm_rsa, tpm_rsa_pub_enc) ||
+	    !RSA_meth_set_pub_dec(tpm_rsa, tpm_rsa_pub_dec) ||
+	    !RSA_meth_set_priv_enc(tpm_rsa, tpm_rsa_priv_enc) ||
+	    !RSA_meth_set_priv_dec(tpm_rsa, tpm_rsa_priv_dec) ||
+	    !RSA_meth_set_bn_mod_exp(tpm_rsa, BN_mod_exp_mont) ||
+	    !RSA_meth_set_init(tpm_rsa, tpm_rsa_init) ||
+	    !RSA_meth_set_finish(tpm_rsa, tpm_rsa_finish) ||
+	    !RSA_meth_set_keygen(tpm_rsa, tpm_rsa_keygen))
+	{
+		RSA_meth_free(tpm_rsa);
+		tpm_rsa = NULL;
+		return 0;
+	}
+
+	return 1;
+}
+
 /* This internal function is used by ENGINE_tpm() and possibly by the
  * "dynamic" ENGINE support too */
 static int bind_helper(ENGINE * e)
 {
+	if (!setup_rsa_method())
+		return 0;
+
+	ssl_rsa = RSA_PKCS1_OpenSSL();
+
 	if (!ENGINE_set_id(e, engine_tpm_id) ||
 	    !ENGINE_set_name(e, engine_tpm_name) ||
 #ifndef OPENSSL_NO_RSA
-	    !ENGINE_set_RSA(e, &tpm_rsa) ||
+	    !ENGINE_set_RSA(e, tpm_rsa) ||
 #endif
 	    !ENGINE_set_RAND(e, &tpm_rand) ||
 	    !ENGINE_set_destroy_function(e, tpm_engine_destroy) ||
@@ -399,7 +413,7 @@ static int tpm_engine_init(ENGINE * e)
 		goto err;
 	}
 
-	tpm_rsa.rsa_mod_exp = RSA_PKCS1_SSLeay()->rsa_mod_exp;
+	RSA_meth_set_mod_exp(tpm_rsa, RSA_meth_get_mod_exp(ssl_rsa));
 
 	return 1;
 err:
@@ -491,6 +505,8 @@ static int tpm_engine_finish(ENGINE * e)
 	}
 	tpm_dso = NULL;
 #endif
+	RSA_meth_free(tpm_rsa);
+	tpm_rsa = NULL;
 	return 1;
 }
 
@@ -500,6 +516,7 @@ int fill_out_rsa_object(RSA *rsa, TSS_HKEY hKey)
 	UINT32 pubkey_len, encScheme, sigScheme;
 	BYTE *pubkey;
 	struct rsa_app_data *app_data;
+	BIGNUM *e = NULL, *n = NULL;
 
 	DBG("%s", __FUNCTION__);
 
@@ -525,7 +542,7 @@ int fill_out_rsa_object(RSA *rsa, TSS_HKEY hKey)
 		return 0;
 	}
 
-	if ((rsa->n = BN_bin2bn(pubkey, pubkey_len, rsa->n)) == NULL) {
+	if ((n = BN_bin2bn(pubkey, pubkey_len, n)) == NULL) {
 		Tspi_Context_FreeMemory(hContext, pubkey);
 		TSSerr(TPM_F_TPM_FILL_RSA_OBJECT, TPM_R_BN_CONVERSION_FAILED);
 		return 0;
@@ -534,23 +551,24 @@ int fill_out_rsa_object(RSA *rsa, TSS_HKEY hKey)
 	Tspi_Context_FreeMemory(hContext, pubkey);
 
 	/* set e in the RSA object */
-	if (!rsa->e && ((rsa->e = BN_new()) == NULL)) {
+	if (((e = BN_new()) == NULL)) {
 		TSSerr(TPM_F_TPM_FILL_RSA_OBJECT, ERR_R_MALLOC_FAILURE);
-		return 0;
+		goto err;
 	}
 
-	if (!BN_set_word(rsa->e, 65537)) {
+	if (!BN_set_word(e, 65537)) {
 		TSSerr(TPM_F_TPM_FILL_RSA_OBJECT, TPM_R_REQUEST_FAILED);
-		BN_free(rsa->e);
-		rsa->e = NULL;
-		return 0;
+		goto err;
 	}
 
 	if ((app_data = OPENSSL_malloc(sizeof(struct rsa_app_data))) == NULL) {
 		TSSerr(TPM_F_TPM_FILL_RSA_OBJECT, ERR_R_MALLOC_FAILURE);
-		BN_free(rsa->e);
-		rsa->e = NULL;
-		return 0;
+		goto err;
+	}
+
+	if (RSA_set0_key(rsa, n, e, NULL) == 0) {
+		TSSerr(TPM_F_TPM_FILL_RSA_OBJECT, TPM_R_REQUEST_FAILED);
+		goto err;
 	}
 
 	DBG("Setting hKey(0x%x) in RSA object", hKey);
@@ -564,6 +582,12 @@ int fill_out_rsa_object(RSA *rsa, TSS_HKEY hKey)
 	RSA_set_ex_data(rsa, ex_app_data, app_data);
 
 	return 1;
+err:
+	if (e)
+		BN_free(e);
+	if (n)
+		BN_free(n);
+	return 0;
 }
 
 static EVP_PKEY *tpm_engine_load_key(ENGINE *e, const char *key_id,
@@ -681,7 +705,6 @@ static EVP_PKEY *tpm_engine_load_key(ENGINE *e, const char *key_id,
 		TSSerr(TPM_F_TPM_ENGINE_LOAD_KEY, ERR_R_MALLOC_FAILURE);
 		return NULL;
 	}
-	pkey->type = EVP_PKEY_RSA;
 
 	if ((rsa = RSA_new()) == NULL) {
 		EVP_PKEY_free(pkey);
@@ -689,10 +712,8 @@ static EVP_PKEY *tpm_engine_load_key(ENGINE *e, const char *key_id,
 		TSSerr(TPM_F_TPM_ENGINE_LOAD_KEY, ERR_R_MALLOC_FAILURE);
 		return NULL;
 	}
-	rsa->meth = &tpm_rsa;
-	/* call our local init function here */
-	rsa->meth->init(rsa);
-	pkey->pkey.rsa = rsa;
+
+	RSA_set_method(rsa, tpm_rsa);
 
 	if (!fill_out_rsa_object(rsa, hKey)) {
 		EVP_PKEY_free(pkey);
@@ -841,8 +862,8 @@ static int tpm_rsa_pub_dec(int flen,
 
 	DBG("%s", __FUNCTION__);
 
-	if ((rv = RSA_PKCS1_SSLeay()->rsa_pub_dec(flen, from, to, rsa,
-						  padding)) < 0) {
+	if ((rv = RSA_meth_get_pub_dec(ssl_rsa)(
+					flen, from, to, rsa, padding)) < 0) {
 		TSSerr(TPM_F_TPM_RSA_PUB_DEC, TPM_R_REQUEST_FAILED);
 		return 0;
 	}
@@ -867,7 +888,7 @@ static int tpm_rsa_priv_dec(int flen,
 	if (!app_data) {
 		DBG("No app data found for RSA object %p. Calling software.",
 		    rsa);
-		if ((rv = RSA_PKCS1_SSLeay()->rsa_priv_dec(flen, from, to, rsa,
+		if ((rv = RSA_meth_get_priv_dec(ssl_rsa)(flen, from, to, rsa,
 						padding)) < 0) {
 			TSSerr(TPM_F_TPM_RSA_PRIV_DEC, TPM_R_REQUEST_FAILED);
 		}
@@ -944,7 +965,7 @@ static int tpm_rsa_pub_enc(int flen,
 	if (!app_data) {
 		DBG("No app data found for RSA object %p. Calling software.",
 		    rsa);
-		if ((rv = RSA_PKCS1_SSLeay()->rsa_pub_enc(flen, from, to, rsa,
+		if ((rv = RSA_meth_get_pub_enc(ssl_rsa)(flen, from, to, rsa,
 						padding)) < 0) {
 			TSSerr(TPM_F_TPM_RSA_PUB_ENC, TPM_R_REQUEST_FAILED);
 		}
@@ -1051,8 +1072,8 @@ static int tpm_rsa_priv_enc(int flen,
 	if (!app_data) {
 		DBG("No app data found for RSA object %p. Calling software.",
 		    rsa);
-		if ((rv = RSA_PKCS1_SSLeay()->rsa_priv_enc(flen, from, to, rsa,
-							   padding)) < 0) {
+		if ((rv = RSA_meth_get_priv_enc(ssl_rsa)(flen, from, to, rsa,
+						padding)) < 0) {
 			TSSerr(TPM_F_TPM_RSA_PRIV_ENC, TPM_R_REQUEST_FAILED);
 		}
 
@@ -1254,7 +1275,7 @@ static int tpm_rand_status(void)
 	return 1;
 }
 
-static void tpm_rand_seed(const void *buf, int num)
+static RAND_SEED_RET_TYPE tpm_rand_seed(const void *buf, int num)
 {
 	TSS_RESULT result;
 	UINT32 total_stirred = 0;
@@ -1267,7 +1288,7 @@ static void tpm_rand_seed(const void *buf, int num)
 		if ((result = Tspi_TPM_StirRandom(hTPM, 255,
 						((BYTE*)buf) + total_stirred))) {
 			TSSerr(TPM_F_TPM_RAND_SEED, TPM_R_REQUEST_FAILED);
-			return;
+			return RAND_SEED_BAD_RETURN;
 		}
 
 		total_stirred += 255;
@@ -1278,7 +1299,7 @@ static void tpm_rand_seed(const void *buf, int num)
 		TSSerr(TPM_F_TPM_RAND_SEED, TPM_R_REQUEST_FAILED);
 	}
 
-	return;
+	return RAND_SEED_GOOD_RETURN;
 }
 
 /* This stuff is needed if this ENGINE is being compiled into a self-contained

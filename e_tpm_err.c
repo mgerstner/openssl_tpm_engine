@@ -18,7 +18,6 @@
 #include <stdio.h>
 
 #include <openssl/err.h>
-#include <openssl/dso.h>
 #include <openssl/engine.h>
 
 #include <tss/platform.h>

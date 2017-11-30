@@ -46,6 +46,8 @@
 #include <trousers/tss.h>
 #include <trousers/trousers.h>
 
+#include "ssl_compat.h"
+
 #define print_error(a,b) \
 	fprintf(stderr, "%s:%d %s result: 0x%x (%s)\n", __FILE__, __LINE__, \
 		a, b, Trspi_Error_String(b))
@@ -115,14 +117,19 @@ int
 openssl_get_modulus_and_prime(RSA *rsa, unsigned int *size_n, unsigned char *n,
 			      unsigned int *size_p, unsigned char *p)
 {
+	const BIGNUM *bn_n = NULL, *bn_p = NULL;
+
+	RSA_get0_key(rsa, &bn_n, NULL, NULL);
+	RSA_get0_factors(rsa, &bn_p, NULL);
+
 	/* get the modulus from the RSA object */
-	if ((*size_n = BN_bn2bin(rsa->n, n)) <= 0) {
+	if ((*size_n = BN_bn2bin(bn_n, n)) <= 0) {
 		openssl_print_errors();
 		return -1;
 	}
 
 	/* get one of the primes from the RSA object */
-	if ((*size_p = BN_bn2bin(rsa->p, p)) <= 0) {
+	if ((*size_p = BN_bn2bin(bn_p, p)) <= 0) {
 		openssl_print_errors();
 		return -1;
 	}
