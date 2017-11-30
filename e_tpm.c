@@ -1137,13 +1137,6 @@ static int tpm_rsa_keygen(RSA *rsa, int bits, BIGNUM *e, BN_GENCB *cb)
 		return 0;
 	}
 
-	/* set e in the RSA object as done in the built-in openssl function */
-	if (!rsa->e && ((rsa->e = BN_new()) == NULL)) {
-		TSSerr(TPM_F_TPM_RSA_KEYGEN, ERR_R_MALLOC_FAILURE);
-		return 0;
-	}
-	BN_copy(rsa->e, e);
-
 	switch (bits) {
 		case 512:
 			initFlags |= TSS_KEY_SIZE_512;
