@@ -908,7 +908,7 @@ static int tpm_rsa_priv_dec(int flen,
 	if ((result = Tspi_SetAttribData(app_data->hEncData,
 					   TSS_TSPATTRIB_ENCDATA_BLOB,
 					   TSS_TSPATTRIB_ENCDATABLOB_BLOB,
-					   in_len, from))) {
+					   in_len, (BYTE*)from))) {
 		TSSerr(TPM_F_TPM_RSA_PRIV_DEC, TPM_R_REQUEST_FAILED);
 		return 0;
 	}
@@ -1010,7 +1010,7 @@ static int tpm_rsa_pub_enc(int flen,
 	    app_data->hEncData, in_len);
 
 	if ((result = Tspi_Data_Bind(app_data->hEncData, app_data->hKey,
-				       in_len, from))) {
+				       in_len, (BYTE*)from))) {
 		TSSerr(TPM_F_TPM_RSA_PUB_ENC, TPM_R_REQUEST_FAILED);
 		DBG("result = 0x%x (%s)", result,
 		    Trspi_Error_String(result));
@@ -1094,7 +1094,8 @@ static int tpm_rsa_priv_enc(int flen,
 		return 0;
 	}
 
-	if ((result = Tspi_Hash_SetHashValue(app_data->hHash, flen, from))) {
+	if ((result = Tspi_Hash_SetHashValue(
+					app_data->hHash, flen, (BYTE*)from))) {
 		TSSerr(TPM_F_TPM_RSA_PRIV_ENC, TPM_R_REQUEST_FAILED);
 		return 0;
 	}
@@ -1263,7 +1264,8 @@ static void tpm_rand_seed(const void *buf, int num)
 	/* There's a hard maximum of 255 bytes allowed to be sent to the TPM on a TPM_StirRandom
 	 * call.  Use all the bytes in  buf, but break them in to 255 or smaller byte chunks */
 	while (num - total_stirred > 255) {
-		if ((result = Tspi_TPM_StirRandom(hTPM, 255, buf + total_stirred))) {
+		if ((result = Tspi_TPM_StirRandom(hTPM, 255,
+						((BYTE*)buf) + total_stirred))) {
 			TSSerr(TPM_F_TPM_RAND_SEED, TPM_R_REQUEST_FAILED);
 			return;
 		}
@@ -1271,7 +1273,8 @@ static void tpm_rand_seed(const void *buf, int num)
 		total_stirred += 255;
 	}
 
-	if ((result = Tspi_TPM_StirRandom(hTPM, num - total_stirred, buf + total_stirred))) {
+	if ((result = Tspi_TPM_StirRandom(hTPM, num - total_stirred,
+					((BYTE*)buf) + total_stirred))) {
 		TSSerr(TPM_F_TPM_RAND_SEED, TPM_R_REQUEST_FAILED);
 	}
 
