@@ -48,6 +48,25 @@ AC_DISABLE_STATIC
 AC_PROG_CC
 AC_PROG_LIBTOOL
 
+AC_MSG_CHECKING([for OpenSSL 1.1])
+AC_TRY_COMPILE(
+    [#include <openssl/opensslv.h>],
+    [
+	    #if OPENSSL_VERSION_NUMBER < 0x1010000fL
+	    #	error "old ssl"
+	    #else
+	    #   warning "new openssl"
+	    #endif
+    ],
+    [AC_MSG_RESULT(yes)
+    openssl_11=true
+    ],
+    [AC_MSG_RESULT(no)
+    openssl_11=false
+    ]
+)
+AM_CONDITIONAL([OPENSSL_11], [test x$openssl_11 = xtrue])
+
 CFLAGS="$CFLAGS -Wall"
 AC_SUBST(CFLAGS)
 
