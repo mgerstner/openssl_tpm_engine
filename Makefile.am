@@ -8,6 +8,7 @@ openssl_enginedir=@libdir@/openssl/engines
 
 libtpm_la_LIBADD=-lcrypto -lc -ltspi
 libtpm_la_SOURCES=e_tpm.c e_tpm.h e_tpm_err.c
+libtpm_la_LDFLAGS=-avoid-version -module -shared -export-dynamic
 
 create_tpm_key_SOURCES=create_tpm_key.c
 create_tpm_key_LDADD=-ltspi -lcrypto
