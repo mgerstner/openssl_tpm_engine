@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include <openssl/engine.h>
 #include <openssl/rsa.h>
@@ -162,10 +163,33 @@ main(int argc, char **argv)
 	char entropy[ENTROPY_SIZE];
 	int entropy_len = ENTROPY_SIZE;
         const char *engine_id = "tpm";
+	char *srk_auth = getenv("OPENSSL_TPM_ENGINE_SRK_AUTH");
+	char *srk_sha_auth = getenv("OPENSSL_TPM_ENGINE_SRK_SHA_AUTH");
 
 	if (!argv[1]) {
 		fprintf(stderr, "usage: %s: <tpm key file>\n", argv[0]);
 		return -1;
+	}
+
+	// if there's an SRK password set allow the caller to specify it via
+	// an env variable
+	if (srk_auth) {
+		post_test_pin_only.void_arg = srk_auth;
+		post_test_plain[1].void_arg = srk_auth;
+		printf("Using SRK auth from environment\n");
+	} else {
+		printf("Using well known SRK auth\n");
+	}
+
+	// similarly for the sha1 has of the SRK password
+	// would be too much of a hassle to calculate sha1 in this test, just
+	// pass the *binary* sha1 in here via env variable
+	// could be replaced by an OpenSSL sha1 hash of the srk_auth value
+	if (srk_sha_auth) {
+		post_test_sha1[1].void_arg = srk_sha_auth;
+		printf("Using SRK sha auth from environment\n");
+	} else {
+		printf("Using well known SRK sha auth\n");
 	}
 
         ENGINE_load_builtin_engines();
