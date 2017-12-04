@@ -21,3 +21,5 @@
 /install-sh
 /libtool
 /missing
+/create_tpm_key
+/test/engine_key_loading
