@@ -93,6 +93,7 @@ run_test(EVP_PKEY *key)
 		{
 			return 1;
 		}
+		BN_free(e);
 	}
 
 	if (!rsa)
@@ -257,6 +258,7 @@ main(int argc, char **argv)
 				ERR_print_errors_fp(stderr);
 				ERR("Post command %d failed", i);
 				failure = 1;
+				EVP_PKEY_free(key);
 				ENGINE_finish(e);
 				return 7;
 			}
@@ -267,6 +269,9 @@ main(int argc, char **argv)
 		failure = run_test(NULL);
 		printf("%s: Done.\n", argv[0]);
 	}
+
+	EVP_PKEY_free(key);
+	key = NULL;
 
 	/* Release the functional reference from ENGINE_init() */
 	ENGINE_finish(e);
