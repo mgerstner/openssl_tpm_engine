@@ -303,5 +303,29 @@ main(int argc, char **argv)
 	ENGINE_finish(e);
 	e = NULL;
 
+#ifdef HAVE_OPENSSL_110
+	/*
+	 * There's a larger issue of deinitialization order when running
+	 * libtspi and OpenSSL 1.1.0 together. libtspi uses an "__attribute__
+	 * ((destructor))" for calling a local static function
+	 * host_table_final(). This call is performed before OpenSSL
+	 * implicitly cleans up itself via an atexit() handler. When OpenSSL
+	 * cleans up itself it will clean up the openssl_tpm_engine which will
+	 * in turn segfault, because the host_table has already been cleaned.
+	 *
+	 * This explicit call will fix the error, but only for successful
+	 * exits at the moment, the return statements further up will still
+	 * cause segfaults. To really solve this some fix on the libtspi side
+	 * will probably be necessary. OpenSSL 1.1 can also be built with
+	 * OPENSSL_NODELETE but I'm not quite sure what that does imply,
+	 * documentation is scarce.
+	 *
+	 * Debian encountered a similar issue:
+	 *
+	 * http://linux.debian.bugs.dist.narkive.com/O1AQ8WGT/bug-844715-openssl-segfault-in-shlibloadtest-observed-on-x32-due-to-dlopen-dlclose-openssl-atexit
+	 */
+	OPENSSL_cleanup();
+#endif
+
 	return failure ? 8 : 0;
 }
