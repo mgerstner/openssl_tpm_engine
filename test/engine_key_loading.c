@@ -243,7 +243,7 @@ main(int argc, char **argv)
 	 */
 	printf("%s: Testing loaded TPM key \"%s\"\n", argv[0], argv[1]);
 	failure = run_test(key);
-	printf("%s: Done.\n", argv[0]);
+	printf("%s: Done Failure code = %d.\n", argv[0], failure);
 
 	/*
 	 * Test 3
@@ -275,8 +275,10 @@ main(int argc, char **argv)
 	for (i = 0; i < 4 && !failure; i++) {
 		post_cmds = test_cmds[i];
 		post_num = test_num[i];
+		printf("%s: Test %d post-init commands\n", argv[0], i);
 		/* Process post-initialize commands */
 		while (post_num--) {
+			printf("Posting cmd %s\n", post_cmds->name);
 			if (!ENGINE_ctrl_cmd(e, post_cmds->name, post_cmds->long_arg,
 					     post_cmds->void_arg, NULL, 0)) {
 				ERR_print_errors_fp(stderr);
@@ -291,7 +293,7 @@ main(int argc, char **argv)
 
 		printf("%s: Test %d with generated TPM key\n", argv[0], i);
 		failure = run_test(NULL);
-		printf("%s: Done.\n", argv[0]);
+		printf("%s: Done. failure code = %d\n", argv[0], failure);
 	}
 
 	EVP_PKEY_free(key);
