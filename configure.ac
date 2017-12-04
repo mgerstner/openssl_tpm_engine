@@ -67,6 +67,17 @@ AC_TRY_COMPILE(
 )
 AM_CONDITIONAL([OPENSSL_11], [test x$openssl_11 = xtrue])
 
+PKG_CHECK_MODULES([libcrypto], [libcrypto],
+		  [libcrypto_enginesdir=`$PKG_CONFIG --variable=enginesdir libcrypto`],
+		  [libcrypto_enginesdir="\${libdir}/openssl/engines"]
+)
+
+AC_ARG_WITH([enginedir],
+  [AS_HELP_STRING([--with-enginedir=DIR], [engine directory])],
+  [enginedir=$withval],
+  [enginedir="$libcrypto_enginesdir"])
+AC_SUBST([enginedir], [$enginedir])
+
 CFLAGS="$CFLAGS -Wall"
 AC_SUBST(CFLAGS)
 

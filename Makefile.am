@@ -3,7 +3,7 @@ SUBDIRS=. test
 EXTRA_DIST = README  openssl.cnf.sample
 
 bin_PROGRAMS=create_tpm_key
-openssl_enginedir=@libdir@/openssl/engines
+openssl_enginedir=@enginedir@
 
 engine_libs=-lcrypto -lc -ltspi
 engine_sources=e_tpm.c e_tpm.h e_tpm_err.c
