@@ -81,7 +81,7 @@ AC_SUBST([enginedir], [$enginedir])
 CFLAGS="$CFLAGS -Wall"
 AC_SUBST(CFLAGS)
 
-AC_OUTPUT(Makefile test/Makefile)
+
+AC_OUTPUT(Makefile src/Makefile test/Makefile)
 
 echo "CFLAGS=$CFLAGS"
-
