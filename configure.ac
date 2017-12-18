@@ -31,7 +31,7 @@ fi
 # Non-standard OpenSSL
 AC_MSG_CHECKING([Non-standard OpenSSL])
 AC_ARG_WITH(openssl,
-	[--with-openssl=PATH      Location of openssl libs/includes],
+	[AS_HELP_STRING([--with-openssl=PATH], [Location of openssl libs/includes])],
 	[OPENSSL_INCLUDE_DIR="$withval/include"
 	 OPENSSL_LIB_DIR="$withval/lib"
 	 if [[ ! -d $OPENSSL_INCLUDE_DIR -o ! -d $OPENSSL_LIB_DIR ]]; then
