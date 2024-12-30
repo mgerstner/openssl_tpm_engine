@@ -2,12 +2,12 @@
 # configure.in for the OpenSSL TPM engine project
 #
 
-AC_INIT(openssl-tpm-engine, 0.5.0, trousers-users@lists.sf.net)
+AC_INIT([openssl-tpm-engine],[0.5.0],[trousers-users@lists.sf.net])
 AM_INIT_AUTOMAKE(1.6.3)
 
 # Debugging support
 AC_ARG_ENABLE(debug,
-		AC_HELP_STRING([--enable-debug], [turn on all debugging flags [default is off]]),
+		AS_HELP_STRING([--enable-debug],[turn on all debugging flags [default is off]]),
 		[enable_debug="yes"
 		 AC_MSG_RESULT([*** Enabling debugging at user request ***])],)
 
@@ -46,25 +46,21 @@ AC_ARG_WITH(openssl,
 
 AC_DISABLE_STATIC
 AC_PROG_CC
-AC_PROG_LIBTOOL
+LT_INIT
 
 AC_MSG_CHECKING([for OpenSSL 1.1])
-AC_TRY_COMPILE(
-    [#include <openssl/opensslv.h>],
-    [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <openssl/opensslv.h>]], [[
 	    #if OPENSSL_VERSION_NUMBER < 0x1010000fL
 	    #	error "old ssl"
 	    #else
 	    #   warning "new openssl"
 	    #endif
-    ],
-    [AC_MSG_RESULT(yes)
+    ]])],[AC_MSG_RESULT(yes)
     openssl_11=true
-    ],
-    [AC_MSG_RESULT(no)
+    ],[AC_MSG_RESULT(no)
     openssl_11=false
-    ]
-)
+    
+])
 AM_CONDITIONAL([OPENSSL_11], [test x$openssl_11 = xtrue])
 
 PKG_CHECK_MODULES([libcrypto], [libcrypto],
@@ -82,6 +78,7 @@ CFLAGS="$CFLAGS -Wall"
 AC_SUBST(CFLAGS)
 
 
-AC_OUTPUT(Makefile src/Makefile test/Makefile)
+AC_CONFIG_FILES([Makefile src/Makefile test/Makefile])
+AC_OUTPUT
 
 echo "CFLAGS=$CFLAGS"
